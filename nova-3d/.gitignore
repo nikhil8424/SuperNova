@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+.venv/
+venv/
+ENV/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# NOVA 3D Runtime Data
+data/projects/*/input/*
+data/projects/*/frames/*
+data/projects/*/colmap/*
+data/projects/*/reconstruction/*
+data/projects/*/logs/*
+data/uploads/*
+data/outputs/*
+data/logs/*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Streamlit
+.streamlit/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
