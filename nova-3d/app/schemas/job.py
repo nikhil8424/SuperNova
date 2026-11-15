@@ -1,7 +1,7 @@
 """
 NOVA 3D - Pydantic Schemas for Reconstruction Jobs
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 
 class ReconstructionRequest(BaseModel):
@@ -12,6 +12,8 @@ class ReconstructionRequest(BaseModel):
     enable_gpu_fallback: bool = True
 
 class JobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     project_id: str
     source_asset_id: Optional[str]
@@ -24,6 +26,3 @@ class JobResponse(BaseModel):
     duration_seconds: Optional[float]
     error_message: Optional[str]
     created_at: Optional[str]
-
-    class Config:
-        from_attributes = True

@@ -1,12 +1,13 @@
 """
 NOVA 3D - Machine Model Explorer View
 Loads structured GLB/GLTF engineering models, displays component tree,
-provides component isolation, selection, and animated exploded-view inspection.
+provides component isolation, selection, and animated exploded-view inspection via WebGL Three.js or Plotly.
 """
 import os
 import shutil
 import json
 import streamlit as st
+import streamlit.components.v1 as components_v1
 import numpy as np
 import plotly.graph_objects as go
 from pathlib import Path
@@ -17,6 +18,7 @@ from app.config import SAMPLES_DIR, PROJECTS_DIR
 from app.machine.model_loader import inspect_3d_model
 from app.machine.component_tree import ComponentTree
 from app.machine.exploded_view import compute_exploded_transforms
+from app.ui.three_viewer import generate_threejs_mesh_viewer_html
 
 def render_machine_explorer(navigate_fn=None):
     st.markdown('<div class="nova-logo-badge">ENGINEERING EXPLORER</div>', unsafe_allow_html=True)
@@ -175,9 +177,11 @@ def render_machine_explorer(navigate_fn=None):
     k3.metric("Total Faces", f"{active_model.face_count:,}")
     k4.metric("Format", active_model.format.upper())
 
-    # Exploded View Intensity Slider
+    # Exploded View Intensity Slider & Renderer Selector
     st.markdown("---")
-    c_slider, c_btn1, c_btn2 = st.columns([3, 1, 1])
+    r_sel_col, c_slider, c_btn1 = st.columns([3, 4, 2])
+    with r_sel_col:
+        renderer_mode = st.radio("3D Viewport Engine", ["Three.js WebGL (Interactive PBR)", "Plotly 3D (Wireframe)"], horizontal=True)
     with c_slider:
         explosion_intensity = st.slider(
             "💥 Exploded View Separation Intensity",
@@ -191,9 +195,6 @@ def render_machine_explorer(navigate_fn=None):
         if st.button("Reset Assembly (0%)"):
             tree.restore_all()
             st.rerun()
-    with c_btn2:
-        if st.button("Explode 100%"):
-            explosion_intensity = 1.0
 
     # Calculate Exploded Transforms
     import json
@@ -211,76 +212,80 @@ def render_machine_explorer(navigate_fn=None):
     with view_col:
         st.subheader("3D Interactive Assembly Viewport")
 
-        # Render 3D Plotly Visualization with Exploded Positions
-        fig = go.Figure()
-        palette = ["#00f0ff", "#a855f7", "#38bdf8", "#f59e0b", "#10b981", "#ec4899", "#8b5cf6"]
+        if "Three.js" in renderer_mode:
+            # High-performance Three.js WebGL Renderer
+            threejs_html = generate_threejs_mesh_viewer_html(
+                model_glb_path=active_model.storage_path,
+                components=components,
+                exploded_transforms=exploded_transforms,
+                explosion_intensity=explosion_intensity,
+                selected_component=tree.selected_node,
+                isolated_component=tree.isolated_node,
+                hidden_components=list(tree.hidden_nodes),
+                height=580
+            )
+            components_v1.html(threejs_html, height=600)
+        else:
+            # Plotly 3D Wireframe / Bounding Box Renderer
+            fig = go.Figure()
+            palette = ["#00f0ff", "#a855f7", "#38bdf8", "#f59e0b", "#10b981", "#ec4899", "#8b5cf6"]
 
-        for idx, comp in enumerate(components):
-            name = comp["node_name"]
-            if name in tree.hidden_nodes:
-                continue
+            for idx, comp in enumerate(components):
+                name = comp["node_name"]
+                if name in tree.hidden_nodes:
+                    continue
 
-            is_selected = (name == tree.selected_node)
-            base_color = palette[idx % len(palette)]
-            render_color = "#ffffff" if is_selected else base_color
+                is_selected = (name == tree.selected_node)
+                base_color = palette[idx % len(palette)]
+                render_color = "#ffffff" if is_selected else base_color
 
-            # Base center + displacement
-            disp = exploded_transforms.get(name, {}).get("displacement", [0.0, 0.0, 0.0])
-            c_orig = comp.get("center", [0.0, 0.0, 0.0])
-            cx, cy, cz = c_orig[0] + disp[0], c_orig[1] + disp[1], c_orig[2] + disp[2]
+                disp = exploded_transforms.get(name, {}).get("displacement", [0.0, 0.0, 0.0])
+                c_orig = comp.get("center", [0.0, 0.0, 0.0])
+                cx, cy, cz = c_orig[0] + disp[0], c_orig[1] + disp[1], c_orig[2] + disp[2]
 
-            ext = comp.get("bounds", {}).get("extents", [0.4, 0.4, 0.4])
-            sx = max(0.15, float(ext[0])) / 2.0
-            sy = max(0.15, float(ext[1])) / 2.0
-            sz = max(0.15, float(ext[2])) / 2.0
+                ext = comp.get("bounds", {}).get("extents", [0.4, 0.4, 0.4])
+                sx = max(0.15, float(ext[0])) / 2.0
+                sy = max(0.15, float(ext[1])) / 2.0
+                sz = max(0.15, float(ext[2])) / 2.0
 
-            # 3D Bounding Box Representation of Component
-            bx = [cx - sx, cx + sx, cx + sx, cx - sx, cx - sx, cx + sx, cx + sx, cx - sx]
-            by = [cy - sy, cy - sy, cy + sy, cy + sy, cy - sy, cy - sy, cy + sy, cy + sy]
-            bz = [cz - sz, cz - sz, cz - sz, cz - sz, cz + sz, cz + sz, cz + sz, cz + sz]
+                bx = [cx - sx, cx + sx, cx + sx, cx - sx, cx - sx, cx + sx, cx + sx, cx - sx]
+                by = [cy - sy, cy - sy, cy + sy, cy + sy, cy - sy, cy - sy, cy + sy, cy + sy]
+                bz = [cz - sz, cz - sz, cz - sz, cz - sz, cz + sz, cz + sz, cz + sz, cz + sz]
 
-            # Wireframe / vertices trace
-            fig.add_trace(go.Scatter3d(
-                x=bx, y=by, z=bz,
-                mode='lines+markers',
-                marker=dict(size=4 if not is_selected else 6, color=render_color),
-                line=dict(color=render_color, width=3 if is_selected else 2),
-                name=comp["display_name"],
-                hovertext=f"{comp['display_name']} ({comp['category']})<br>Vertices: {comp['vertex_count']:,}",
-                hoverinfo="text"
-            ))
-
-            # Directional vector line from original center
-            if explosion_intensity > 0.1:
                 fig.add_trace(go.Scatter3d(
-                    x=[c_orig[0], cx],
-                    y=[c_orig[1], cy],
-                    z=[c_orig[2], cz],
-                    mode='lines',
-                    line=dict(color='rgba(168, 85, 247, 0.4)', width=1, dash='dot'),
-                    showlegend=False,
-                    hoverinfo='none'
+                    x=bx, y=by, z=bz,
+                    mode='lines+markers',
+                    marker=dict(size=4 if not is_selected else 6, color=render_color),
+                    line=dict(color=render_color, width=3 if is_selected else 2),
+                    name=comp["display_name"],
+                    hovertext=f"{comp['display_name']} ({comp['category']})<br>Vertices: {comp['vertex_count']:,}",
+                    hoverinfo="text"
                 ))
 
-        fig.update_layout(
-            paper_bgcolor="#0b0d13",
-            plot_bgcolor="#0b0d13",
-            height=580,
-            margin=dict(l=0, r=0, t=10, b=0),
-            scene=dict(
-                xaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
-                yaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
-                zaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
-                camera=dict(eye=dict(x=1.8, y=1.8, z=1.4))
-            ),
-            legend=dict(
-                x=0.02, y=0.98,
-                bgcolor="rgba(18, 21, 31, 0.7)",
-                bordercolor="#262c40",
-                font=dict(color="#f1f5f9", size=10)
+                if explosion_intensity > 0.1:
+                    fig.add_trace(go.Scatter3d(
+                        x=[c_orig[0], cx],
+                        y=[c_orig[1], cy],
+                        z=[c_orig[2], cz],
+                        mode='lines',
+                        line=dict(color='rgba(168, 85, 247, 0.4)', width=1, dash='dot'),
+                        showlegend=False,
+                        hoverinfo='none'
+                    ))
+
+            fig.update_layout(
+                paper_bgcolor="#0b0d13",
+                plot_bgcolor="#0b0d13",
+                height=580,
+                margin=dict(l=0, r=0, t=10, b=0),
+                scene=dict(
+                    xaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
+                    yaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
+                    zaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
+                    camera=dict(eye=dict(x=1.8, y=1.8, z=1.4))
+                )
             )
-        )
-        st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
 
     with side_col:
         st.subheader("Component Tree & Hierarchy")

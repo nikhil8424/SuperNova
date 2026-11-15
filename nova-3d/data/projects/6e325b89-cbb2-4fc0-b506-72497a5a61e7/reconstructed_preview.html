@@ -1,0 +1,171 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                background-color: #0b0d13;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                color: #f1f5f9;
+            }
+            #splat-container {
+                width: 100%;
+                height: 600px;
+                position: relative;
+                border-radius: 10px;
+                overflow: hidden;
+                border: 1px solid #262c40;
+            }
+            #splat-hud {
+                position: absolute;
+                top: 12px;
+                left: 12px;
+                background: rgba(18, 21, 31, 0.85);
+                backdrop-filter: blur(8px);
+                border: 1px solid #262c40;
+                border-radius: 8px;
+                padding: 8px 14px;
+                font-size: 12px;
+                pointer-events: none;
+                z-index: 10;
+            }
+            .hud-title {
+                color: #a855f7;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            #splat-toolbar {
+                position: absolute;
+                bottom: 12px;
+                right: 12px;
+                background: rgba(18, 21, 31, 0.85);
+                backdrop-filter: blur(8px);
+                border: 1px solid #262c40;
+                border-radius: 8px;
+                padding: 6px 10px;
+                display: flex;
+                gap: 8px;
+                z-index: 10;
+            }
+            .btn-tool {
+                background: #1a1e2d;
+                border: 1px solid #262c40;
+                color: #f1f5f9;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .btn-tool:hover {
+                border-color: #a855f7;
+                color: #a855f7;
+            }
+        </style>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    </head>
+    <body>
+        <div id="splat-container">
+            <div id="splat-hud">
+                <div class="hud-title">Gaussian Splatting Primitive Viewport</div>
+                <div>Rendered Primitives: 36 • Shading: Vertex RGB + Depth</div>
+            </div>
+            <div id="splat-toolbar">
+                <button class="btn-tool" onclick="resetView()">Reset Orbit</button>
+                <button class="btn-tool" onclick="toggleSpin()">Auto Spin</button>
+                <button class="btn-tool" onclick="topView()">Top View</button>
+            </div>
+        </div>
+
+        <script>
+            const container = document.getElementById('splat-container');
+            const positions = new Float32Array([-2.5402, 4.7842, 18.3352, 1.7871, -0.2236, 18.0368, 0.2057, 1.0084, 10.9623, 1.0468, 0.4667, 6.659, 0.3706, 0.9671, 10.3339, 0.4667, 0.9518, 7.8675, -1.4905, 4.5281, 16.8334, -0.1662, 0.1157, 8.402, -0.1582, 0.1147, 8.2542, -2.2924, 2.8596, 36.7985, -0.4843, 0.3638, 8.8988, -0.7323, 0.2872, 5.3107, -0.7727, 0.2694, 5.601, -1.052, 1.4018, 16.7933, -0.7631, 0.2646, 5.5262, -0.8417, 0.6421, 8.1665, -0.8148, 0.8653, 9.6413, -0.7979, 0.6199, 7.7931, -0.7689, 0.9451, 10.9883, -4.3619, 4.1741, 16.0285, -0.1137, 0.2916, 1.1195, -0.1056, 0.381, 1.4484, -5.7645, 5.4801, 20.5901, -13.1137, 11.6579, 44.7216, -10.9544, 9.8965, 37.9648, -0.567, 0.2275, 5.5869, -0.4781, 0.2008, 4.9316, -0.5775, 0.4103, 6.7613, -0.453, -0.0026, 3.6914, -7.7141, 7.0525, 27.0534, -0.5713, -0.8082, 9.5188, -3.1221, 10.3523, 38.6213, 0.1161, -0.3283, 3.3468, 0.1129, -0.3359, 3.4139, 0.2042, -0.4486, 4.6987, 0.0227, -0.1176, 0.8549]);
+            const colors = new Float32Array([0.49019607843137253, 0.4666666666666667, 0.4666666666666667, 0.027450980392156862, 0.047058823529411764, 0.03137254901960784, 0.07058823529411765, 0.06666666666666667, 0.047058823529411764, 0.6313725490196078, 0.20392156862745098, 0.7647058823529411, 0.1411764705882353, 0.7176470588235294, 0.8470588235294118, 0.24313725490196078, 0.7098039215686275, 0.8431372549019608, 0.3137254901960784, 0.26666666666666666, 0.26666666666666666, 0.050980392156862744, 0.13725490196078433, 0.19215686274509805, 0.0, 0.12941176470588237, 0.17647058823529413, 0.0, 0.11372549019607843, 0.1450980392156863, 0.2627450980392157, 0.6705882352941176, 0.8235294117647058, 0.12156862745098039, 0.03137254901960784, 0.13333333333333333, 0.16470588235294117, 0.043137254901960784, 0.20784313725490197, 0.8941176470588236, 0.8705882352941177, 0.33725490196078434, 0.16470588235294117, 0.043137254901960784, 0.20784313725490197, 0.5764705882352941, 0.19607843137254902, 0.7529411764705882, 0.0, 0.1568627450980392, 0.20392156862745098, 0.5333333333333333, 0.2235294117647059, 0.6745098039215687, 0.08235294117647059, 0.07450980392156863, 0.09411764705882353, 0.6862745098039216, 0.6549019607843137, 0.6470588235294118, 0.6745098039215687, 0.6352941176470588, 0.6313725490196078, 0.6862745098039216, 0.6549019607843137, 0.6470588235294118, 0.6705882352941176, 0.6313725490196078, 0.6274509803921569, 0.6745098039215687, 0.6352941176470588, 0.6313725490196078, 0.15294117647058825, 0.12156862745098039, 0.11372549019607843, 0.03529411764705882, 0.11764705882352941, 0.12941176470588237, 0.9058823529411765, 0.8431372549019608, 0.4588235294117647, 0.9333333333333333, 0.8666666666666667, 0.4196078431372549, 0.2196078431372549, 0.19607843137254902, 0.19607843137254902, 0.5764705882352941, 0.5450980392156862, 0.5372549019607843, 0.9450980392156862, 0.8274509803921568, 0.3803921568627451, 0.6862745098039216, 0.6392156862745098, 0.6392156862745098, 0.9490196078431372, 0.8666666666666667, 0.19607843137254902, 0.9686274509803922, 0.8588235294117647, 0.13333333333333333, 0.9647058823529412, 0.8862745098039215, 0.2627450980392157, 0.1450980392156863, 0.6980392156862745, 0.8784313725490196]);
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0d13);
+
+            const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 500);
+            camera.position.set(2.5, 2.0, 3.0);
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Build BufferGeometry
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            // Custom Points Material with Circular Blur
+            const material = new THREE.PointsMaterial({
+                size: 0.15000000000000002,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.9,
+                sizeAttenuation: true
+            });
+
+            const pointCloud = new THREE.Points(geometry, material);
+            scene.add(pointCloud);
+
+            // Floor Grid
+            const grid = new THREE.GridHelper(8, 16, 0xa855f7, 0x1f2438);
+            grid.position.y = -1.0;
+            scene.add(grid);
+
+            // Orbit trajectory ring
+            const curve = new THREE.EllipseCurve(0, 0, 2.2, 2.2, 0, 2 * Math.PI, false, 0);
+            const pts = curve.getPoints(50);
+            const ringGeo = new THREE.BufferGeometry().setFromPoints(pts);
+            const ringMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.4 });
+            const ring = new THREE.Line(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            scene.add(ring);
+
+            let spinning = false;
+            function animate() {
+                requestAnimationFrame(animate);
+                if (spinning) {
+                    pointCloud.rotation.y += 0.006;
+                }
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            window.resetView = function() {
+                camera.position.set(2.5, 2.0, 3.0);
+                controls.target.set(0, 0, 0);
+                pointCloud.rotation.set(0, 0, 0);
+            };
+
+            window.toggleSpin = function() {
+                spinning = !spinning;
+            };
+
+            window.topView = function() {
+                camera.position.set(0, 4.5, 0);
+                controls.target.set(0, 0, 0);
+            };
+
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+        </script>
+    </body>
+    </html>
+    

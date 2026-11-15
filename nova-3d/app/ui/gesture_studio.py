@@ -1,13 +1,14 @@
 """
 NOVA 3D - Hand Gesture Recognition Studio View
 Enables opt-in webcam tracking, visualizes 21-landmark skeletal HUD,
-detects 9 interaction gestures, and maps them to 3D viewer actions.
+detects 9 interaction gestures, and maps them to real-time 3D viewport actions.
 """
 import time
 import streamlit as st
 import numpy as np
 import cv2
 from PIL import Image
+import plotly.graph_objects as go
 
 from app.gestures.hand_tracker import HandTracker
 from app.gestures.gesture_mapper import DEFAULT_ACTION_MAP, map_gesture_to_action
@@ -20,6 +21,16 @@ def render_gesture_studio():
 
     # Privacy & Opt-in Notice
     st.info("🔒 **Privacy Guarantee:** Webcam tracking is processed 100% locally on your machine. Footage is never recorded, transmitted, or stored.")
+
+    # Session State for Gesture-Driven 3D Canvas
+    if "gesture_cam_rot_x" not in st.session_state:
+        st.session_state["gesture_cam_rot_x"] = 1.6
+    if "gesture_cam_rot_y" not in st.session_state:
+        st.session_state["gesture_cam_rot_y"] = 1.6
+    if "gesture_cam_zoom" not in st.session_state:
+        st.session_state["gesture_cam_zoom"] = 1.8
+    if "gesture_selected_part" not in st.session_state:
+        st.session_state["gesture_selected_part"] = "None"
 
     # Control Bar
     ctrl_col1, ctrl_col2, ctrl_col3 = st.columns(3)
@@ -42,7 +53,7 @@ def render_gesture_studio():
         with g_c2:
             st.markdown("""
             - ↔️ **Horizontal Movement:** Rotate camera orbit.
-            - ↕️ **Vertical Movement:** Adjust elevation / pan.
+            - ↕️ **Vertical Movement:** Adjust camera elevation.
             - 👐 **Two-Hand Spread:** Zoom in closer.
             """)
         with g_c3:
@@ -54,16 +65,18 @@ def render_gesture_studio():
 
     st.markdown("---")
 
-    cam_col, hud_col = st.columns([7, 5])
+    cam_col, hud_col = st.columns([6, 6])
+
+    latest_gesture = "Neutral"
+    latest_conf = 0.0
+    latest_action = map_gesture_to_action("Neutral")
 
     if enable_camera:
         with cam_col:
-            st.subheader("Live Tracking HUD")
-            # Streamlit camera input
-            camera_image = st.camera_input("Optical Sensor Input", key="gesture_cam_feed")
+            st.subheader("Live Optical HUD Feed")
+            camera_image = st.camera_input("Optical Sensor Stream", key="gesture_cam_feed")
 
             if camera_image is not None:
-                # Convert PIL image to BGR numpy array
                 img_pil = Image.open(camera_image)
                 frame_rgb = np.array(img_pil)
                 frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
@@ -77,30 +90,96 @@ def render_gesture_studio():
 
                 st.image(annotated_rgb, caption="Processed HUD with 21 Landmark Keypoints", use_container_width=True)
 
-                with hud_col:
-                    st.subheader("Gesture Telemetry")
-                    if results["hand_detected"]:
-                        st.markdown(f"""
-                        <div class="nova-card" style="border-color: #00f0ff;">
-                            <div style="font-size: 0.8rem; color: #94a3b8;">DETECTED GESTURE</div>
-                            <div style="font-size: 1.8rem; font-weight: 700; color: #00f0ff;">
-                                {results['smoothed_gesture']}
-                            </div>
-                            <div style="font-size: 0.9rem; color: #a855f7; margin-top: 4px;">
-                                Action: <strong>{results['action']['action']}</strong> ({results['action']['target']})
-                            </div>
-                            <div style="margin-top: 8px;">Confidence: <strong>{int(results['confidence'] * 100)}%</strong></div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown("""
-                        <div class="nova-card">
-                            <div style="color: #94a3b8;">No hand detected in camera frame. Position your hand inside the frame.</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                if results["hand_detected"]:
+                    latest_gesture = results['smoothed_gesture']
+                    latest_conf = results['confidence']
+                    latest_action = results['action']
 
-                    st.markdown("**Viewer Action Mappings:**")
-                    st.json(DEFAULT_ACTION_MAP)
+                    # Map gesture actions to 3D canvas session states
+                    if latest_gesture == "Horizontal Hand Movement":
+                        st.session_state["gesture_cam_rot_x"] += 0.25
+                    elif latest_gesture == "Vertical Hand Movement":
+                        st.session_state["gesture_cam_rot_y"] += 0.20
+                    elif "Zoom In" in latest_gesture:
+                        st.session_state["gesture_cam_zoom"] = max(0.8, st.session_state["gesture_cam_zoom"] - 0.2)
+                    elif "Zoom Out" in latest_gesture:
+                        st.session_state["gesture_cam_zoom"] = min(3.5, st.session_state["gesture_cam_zoom"] + 0.2)
+                    elif latest_gesture == "Pinch":
+                        st.session_state["gesture_selected_part"] = "Target Core Assembly"
+                    elif latest_gesture == "Closed Fist":
+                        st.session_state["gesture_selected_part"] = "None"
+        with hud_col:
+            st.subheader("Gesture Telemetry & Live 3D Target")
+
+            if latest_gesture != "Neutral":
+                st.markdown(f"""
+                <div class="nova-card" style="border-color: #00f0ff;">
+                    <div style="font-size: 0.8rem; color: #94a3b8;">ACTIVE GESTURE DETECTED</div>
+                    <div style="font-size: 1.8rem; font-weight: 700; color: #00f0ff;">
+                        {latest_gesture.upper()}
+                    </div>
+                    <div style="font-size: 0.95rem; color: #a855f7; margin-top: 4px;">
+                        Triggered Action: <strong>{latest_action['action']}</strong> ({latest_action['target']})
+                    </div>
+                    <div style="margin-top: 6px; font-size: 0.85rem;">Confidence: <strong>{int(latest_conf * 100)}%</strong></div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="nova-card">
+                    <div style="color: #94a3b8;">Ready for gesture input. Show your hand to the sensor.</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Interactive 3D Gesture Target Mesh Canvas
+            fig = go.Figure()
+            # Render a 3D target calibration geometry
+            t = np.linspace(0, 2*np.pi, 30)
+            u = np.linspace(0, np.pi, 15)
+            x = 1.0 * np.outer(np.cos(t), np.sin(u))
+            y = 1.0 * np.outer(np.sin(t), np.sin(u))
+            z = 1.0 * np.outer(np.ones(np.size(t)), np.cos(u))
+
+            is_part_selected = st.session_state["gesture_selected_part"] != "None"
+            mesh_color = "#ffffff" if is_part_selected else "#00f0ff"
+
+            fig.add_trace(go.Surface(
+                x=x, y=y, z=z,
+                colorscale=[[0, '#00f0ff'], [0.5, '#a855f7'], [1, '#38bdf8']],
+                showscale=False,
+                opacity=0.85
+            ))
+
+            cam_eye = dict(
+                x=float(st.session_state["gesture_cam_zoom"] * np.cos(st.session_state["gesture_cam_rot_x"])),
+                y=float(st.session_state["gesture_cam_zoom"] * np.sin(st.session_state["gesture_cam_rot_x"])),
+                z=float(st.session_state["gesture_cam_rot_y"])
+            )
+
+            fig.update_layout(
+                paper_bgcolor="#0b0d13",
+                plot_bgcolor="#0b0d13",
+                margin=dict(l=0, r=0, t=10, b=0),
+                height=340,
+                scene=dict(
+                    xaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
+                    yaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
+                    zaxis=dict(backgroundcolor="#12151f", gridcolor="#262c40", showbackground=True),
+                    camera=dict(eye=cam_eye)
+                )
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            btn_r1, btn_r2 = st.columns(2)
+            with btn_r1:
+                if st.button("Reset 3D Canvas"):
+                    st.session_state["gesture_cam_rot_x"] = 1.6
+                    st.session_state["gesture_cam_rot_y"] = 1.6
+                    st.session_state["gesture_cam_zoom"] = 1.8
+                    st.session_state["gesture_selected_part"] = "None"
+                    st.rerun()
+            with btn_r2:
+                st.caption(f"Part Status: **{st.session_state['gesture_selected_part']}**")
     else:
         with cam_col:
             st.subheader("Optical Sensor Status")

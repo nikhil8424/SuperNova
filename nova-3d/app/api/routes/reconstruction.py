@@ -36,6 +36,7 @@ def start_reconstruction(
     project.status = "processing"
     db.commit()
     db.refresh(job)
+    job_dict = job.to_dict()
 
     # Submit to background worker
     job_worker.submit_reconstruction_job(
@@ -47,7 +48,7 @@ def start_reconstruction(
         training_iterations=req.training_iterations
     )
 
-    return job.to_dict()
+    return job_dict
 
 @router.get("/api/jobs/{job_id}", response_model=JobResponse)
 def get_job_status(job_id: str, db: Session = Depends(get_db)):

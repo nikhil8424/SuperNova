@@ -17,14 +17,20 @@ def run_api(host="127.0.0.1", port=8000):
 
 def run_ui(port=8501):
     print(f"[*] Starting NOVA 3D Streamlit Interface on http://localhost:{port} ...")
+    ui_env = os.environ.copy()
+    ui_env["USERPROFILE"] = str(BASE_DIR)
+    ui_env["HOME"] = str(BASE_DIR)
+    ui_env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+    ui_env["STREAMLIT_SERVER_HEADLESS"] = "true"
     cmd = [
         sys.executable, "-m", "streamlit", "run",
         str(BASE_DIR / "app" / "ui" / "app.py"),
         "--server.port", str(port),
         "--server.headless", "true",
+        "--browser.gatherUsageStats", "false",
         "--theme.base", "dark"
     ]
-    return subprocess.Popen(cmd, cwd=str(BASE_DIR))
+    return subprocess.Popen(cmd, cwd=str(BASE_DIR), env=ui_env)
 
 def main():
     parser = argparse.ArgumentParser(description="NOVA 3D Launcher")

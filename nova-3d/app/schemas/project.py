@@ -1,7 +1,7 @@
 """
 NOVA 3D - Pydantic Schemas for Projects
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -16,6 +16,8 @@ class ProjectUpdate(BaseModel):
     status: Optional[str] = None
 
 class ProjectResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     description: Optional[str]
@@ -25,6 +27,3 @@ class ProjectResponse(BaseModel):
     updated_at: Optional[str]
     asset_count: int = 0
     job_count: int = 0
-
-    class Config:
-        from_attributes = True
