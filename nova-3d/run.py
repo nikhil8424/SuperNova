@@ -5,6 +5,7 @@ Launches the Streamlit UI, FastAPI backend, or both concurrently.
 import argparse
 import subprocess
 import sys
+import os
 import time
 from pathlib import Path
 
